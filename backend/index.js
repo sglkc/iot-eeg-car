@@ -1,27 +1,36 @@
 import Aedes from 'aedes'
 import { createServer } from 'net'
 import express from 'express'
+import { Server } from 'socket.io'
 
-const api = express()
-const aedes = new Aedes()
-const broker = createServer(aedes.handle)
+const app = express()
+const mqtt = new Aedes()
+const api = createServer(app)
+const ws = new Server(api)
+const broker = createServer(mqtt.handle)
 
-api.use(express.query())
-
-aedes.on('client', (client) => {
+// jika ada client yang konek ke broker mqtt
+mqtt.on('client', (client) => {
   console.log('client connected', client.id)
 })
 
-broker.listen(1883, () => {
-  console.log('server started and listening on port ', 1883)
+// jika ada pesan yang dipublish
+mqtt.on('publish', (data) => {
+  ws.emit(data.topic, data.payload)
 })
 
-api.get('/send', (req, res) => {
+// jika ada client yang konek ke websocket
+ws.on('connection', (user) => {
+  console.log('webscoket koneksi', user)
+})
+
+// endpoint api
+app.get('/send', (req, res) => {
   const { text } = req.query
 
   if (!text) return res.status(400).send('text query missing')
 
-  aedes.publish({
+  mqtt.publish({
     topic: 'first/test',
     payload: text
   })
@@ -29,6 +38,12 @@ api.get('/send', (req, res) => {
   return res.send('success')
 })
 
+// port default mqtt broker
+broker.listen(1883, () => {
+  console.log('server started and listening on port ', 1883)
+})
+
+// port default api
 api.listen(8080, () => {
-  console.log('api listening')
+  console.log('app listening')
 })
