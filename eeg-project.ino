@@ -1,7 +1,6 @@
 /*********
   Rui Santos
   Complete instructions at https://RandomNerdTutorials.com/esp32-cam-projects-ebook/
-  
   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
   The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 *********/
@@ -88,7 +87,7 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
       }
       img {  width: auto ;
         max-width: 100% ;
-        height: auto ; 
+        height: auto ;
       }
     </style>
   </head>
@@ -97,7 +96,7 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
     <img src="" id="photo" >
     <table>
       <tr>
-        <td colspan="2" align="center">
+        <td colspan="3" align="center">
           <button class="button" data-start="forward" data-stop="stop">Forward</button>
         </td>
       </tr>
@@ -106,15 +105,18 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
           <button class="button" data-start="left" data-stop="stop">Left</button>
         </td>
         <td align="center">
+          <button class="button" data-start="stop" data-stop="stop">Stop</button>
+        </td>
+        <td align="center">
           <button class="button" data-start="right" data-stop="stop">Right</button>
         </td>
       </tr>
       <tr>
-        <td colspan="2" align="center">
+        <td colspan="3" align="center">
           <button class="button" data-start="backward" data-stop="stop">Backward</button>
         </td>
-      </tr>                   
-      <tr> 
+      </tr>
+      <tr>
         <td>
           <button class="button" data-start="servo-left" data-stop="servo-stop">Servo Left</button>
         </td>
@@ -209,7 +211,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
   char*  buf;
   size_t buf_len;
   char variable[32] = {0,};
-  
+
   buf_len = httpd_req_get_url_query_len(req) + 1;
   if (buf_len > 1) {
     buf = (char*)malloc(buf_len);
@@ -237,7 +239,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
 
   sensor_t * s = esp_camera_sensor_get();
   int res = 0;
-  
+
   if(!strcmp(variable, "forward")) {
     Serial.println("Forward");
     digitalWrite(MOTOR_1_PIN_1, 1);
@@ -248,7 +250,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
   else if(!strcmp(variable, "left")) {
     Serial.println("Left");
     digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 1);
+    digitalWrite(MOTOR_1_PIN_2, 0);
     digitalWrite(MOTOR_2_PIN_1, 1);
     digitalWrite(MOTOR_2_PIN_2, 0);
   }
@@ -257,7 +259,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
     digitalWrite(MOTOR_1_PIN_1, 1);
     digitalWrite(MOTOR_1_PIN_2, 0);
     digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 1);
+    digitalWrite(MOTOR_2_PIN_2, 0);
   }
   else if(!strcmp(variable, "backward")) {
     Serial.println("Backward");
@@ -330,9 +332,22 @@ void startCameraServer(){
   }
 }
 
+String get_status(int status) {
+  switch (status) {
+    case WL_IDLE_STATUS: return "WL_IDLE_STATUS";
+    case WL_SCAN_COMPLETED: return "WL_SCAN_COMPLETED";
+    case WL_NO_SSID_AVAIL: return "WL_NO_SSID_AVAIL";
+    case WL_CONNECT_FAILED: return "WL_CONNECT_FAILED";
+    case WL_CONNECTION_LOST: return "WL_CONNECTION_LOST";
+    case WL_DISCONNECTED: return "WL_DISCONNECTED";
+    case WL_CONNECTED: return "WL_CONNECTED";
+    default: return "IDK";
+  }
+}
+
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-  
+
   pinMode(MOTOR_1_PIN_1, OUTPUT);
   pinMode(MOTOR_1_PIN_2, OUTPUT);
   pinMode(MOTOR_2_PIN_1, OUTPUT);
@@ -344,7 +359,7 @@ void setup() {
 
   Serial.begin(115200);
   Serial.setDebugOutput(false);
-  
+
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -365,8 +380,8 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG; 
-  
+  config.pixel_format = PIXFORMAT_JPEG;
+
   if(psramFound()){
     config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 10;
@@ -376,7 +391,7 @@ void setup() {
     config.jpeg_quality = 12;
     config.fb_count = 1;
   }
-  
+
   // Camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -384,16 +399,19 @@ void setup() {
     return;
   }
   // Wi-Fi connection
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  int status = WiFi.status();
+  while (status != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    status = WiFi.status();
+    Serial.println(get_status(status));
   }
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.print("Camera Stream Ready! Go to: http://");
   Serial.println(WiFi.localIP());
-  
+
   // Start streaming web server
   startCameraServer();
 }
@@ -401,7 +419,7 @@ void setup() {
 void loop() {
   servoDegree += servoIncrement;
 
-  if (servoDegree > 0 && servoDegree < 180) {
+  if (servoDegree != servo.read() && servoDegree > 0 && servoDegree < 180) {
     servo.write(servoDegree);
   }
 
