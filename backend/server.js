@@ -3,14 +3,15 @@ import http from 'node:http'
 import Aedes from 'aedes'
 import express from 'express'
 import { Server } from 'socket.io'
+import { MongoClient } from 'mongodb'
 
 const app = express()
 const mqtt = new Aedes()
 const api = http.createServer(app)
 const ws = new Server(api)
 const broker = net.createServer(mqtt.handle)
-
-app.disable('x-powered-by')
+const mongo = new MongoClient('mongodb://localhost:27017')
+const db = mongo.db('eeg-project')
 
 // jika ada client yang konek ke broker mqtt
 mqtt.on('client', (client) => {
@@ -48,6 +49,10 @@ app.get('/send', (req, res) => {
   })
 
   return res.send('success')
+})
+
+mongo.connect().then(() => {
+  console.log('mongo db connected')
 })
 
 // port default mqtt broker
