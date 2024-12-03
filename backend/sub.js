@@ -1,9 +1,12 @@
-var mqtt = require('mqtt')
-var client  = mqtt.connect('mqtt://localhost')
+import mqtt from 'mqtt'
+
+const client = mqtt.connect('mqtt://localhost')
+
 client.on('connect', function () {
   client.subscribe('Topic test')
 })
+
 client.on('message', function (topic, message) {
-  context = message.toString();
+  context = message.toString()
   console.log(context)
 })
