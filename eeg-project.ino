@@ -1,10 +1,3 @@
-/*********
-  Rui Santos
-  Complete instructions at https://RandomNerdTutorials.com/esp32-cam-projects-ebook/
-  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
-  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*********/
-
 #include <WiFi.h>
 #include <ESP32Servo.h>
 #include "esp_camera.h"
@@ -14,10 +7,13 @@
 #include "fb_gfx.h"
 #include "soc/soc.h"             // disable brownout problems
 #include "soc/rtc_cntl_reg.h"    // disable brownout problems
-#include "esp_http_server.h"
+#include <PubSubClient.h>
 
-const char* ssid = "HOTSPOT-ITENAS";
-const char* password = "";
+const char* ssid = "ICT_LAB";
+const char* password = "ICTLAB2023";
+const char* mqtt_server = "192.168.1.100";
+const char* mqtt_commands_topic = "esp32/commands";
+const char* mqtt_camera_topic = "esp32/camera";
 
 #define PART_BOUNDARY "---split---"
 
@@ -50,289 +46,85 @@ Servo servo;
 int servoDegree = 90;
 int servoIncrement = 0;
 
-static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
-static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
-static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+WiFiClient espClient;
+PubSubClient client(espClient);
 
-httpd_handle_t camera_httpd = NULL;
-httpd_handle_t stream_httpd = NULL;
+int lastWifiStatus;
+unsigned long lastCaptureTime = 0;
 
-static const char PROGMEM INDEX_HTML[] = R"rawliteral(
-<html>
-  <head>
-    <title>ESP32-CAM Robot</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body { font-family: Arial; text-align: center; margin:0px auto; padding-top: 30px;}
-      table { margin-left: auto; margin-right: auto; }
-      td { padding: 8 px; }
-      .button {
-        background-color: #2f4468;
-        border: none;
-        color: white;
-        padding: 10px 20px;
-        text-align: center;
-        text-decoration: none;
-        display: inline-block;
-        font-size: 18px;
-        margin: 6px 3px;
-        cursor: pointer;
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        -khtml-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-        -webkit-tap-highlight-color: rgba(0,0,0,0);
-      }
-      img {  width: auto ;
-        max-width: 100% ;
-        height: auto ;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>ESP32-CAM Robot</h1>
-    <img src="" id="photo" >
-    <table>
-      <tr>
-        <td colspan="3" align="center">
-          <button class="button" data-start="forward" data-stop="stop">Forward</button>
-        </td>
-      </tr>
-      <tr>
-        <td align="center">
-          <button class="button" data-start="left" data-stop="stop">Left</button>
-        </td>
-        <td align="center">
-          <button class="button" data-start="stop" data-stop="stop">Stop</button>
-        </td>
-        <td align="center">
-          <button class="button" data-start="right" data-stop="stop">Right</button>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="3" align="center">
-          <button class="button" data-start="backward" data-stop="stop">Backward</button>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <button class="button" data-start="servo-left" data-stop="servo-stop">Servo Left</button>
-        </td>
-        <td>
-          <button class="button" data-start="servo-right" data-stop="servo-stop">Servo Right</button>
-        </td>
-      </tr>
-    </table>
-   <script>
-   function cmdFetch(command) {
-    fetch('/action?go=' + command)
-   }
-   function cmdButton(button) {
-     const { start, stop } = button.dataset
-     button.addEventListener('mousedown', () => cmdFetch(start))
-     button.addEventListener('touchstart', () => cmdFetch(start))
-     button.addEventListener('mouseup', () => cmdFetch(stop))
-     button.addEventListener('touchend', () => cmdFetch(stop))
-   }
-   Array.from(document.getElementsByClassName('button')).forEach(cmdButton)
-   window.onload = document.getElementById("photo").src = window.location.href.slice(0, -1) + ":81/stream";
-  </script>
-  </body>
-</html>
-)rawliteral";
-
-static esp_err_t index_handler(httpd_req_t *req){
-  httpd_resp_set_type(req, "text/html");
-  return httpd_resp_send(req, (const char *)INDEX_HTML, strlen(INDEX_HTML));
-}
-
-static esp_err_t stream_handler(httpd_req_t *req){
-  camera_fb_t * fb = NULL;
-  esp_err_t res = ESP_OK;
-  size_t _jpg_buf_len = 0;
-  uint8_t * _jpg_buf = NULL;
-  char * part_buf[64];
-
-  res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
-  if(res != ESP_OK){
-    return res;
+void callback(char* topic, byte* payload, unsigned int length) {
+  String command = "";
+  for (unsigned int i = 0; i < length; i++) {
+    command += (char)payload[i];
   }
 
-  while(true){
-    fb = esp_camera_fb_get();
-    if (!fb) {
-      Serial.println("Camera capture failed");
-      res = ESP_FAIL;
-    } else {
-      if(fb->width > 400){
-        if(fb->format != PIXFORMAT_JPEG){
-          bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-          esp_camera_fb_return(fb);
-          fb = NULL;
-          if(!jpeg_converted){
-            Serial.println("JPEG compression failed");
-            res = ESP_FAIL;
-          }
-        } else {
-          _jpg_buf_len = fb->len;
-          _jpg_buf = fb->buf;
-        }
-      }
-    }
-    if(res == ESP_OK){
-      size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
-      res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
-    }
-    if(res == ESP_OK){
-      res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
-    }
-    if(res == ESP_OK){
-      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
-    }
-    if(fb){
-      esp_camera_fb_return(fb);
-      fb = NULL;
-      _jpg_buf = NULL;
-    } else if(_jpg_buf){
-      free(_jpg_buf);
-      _jpg_buf = NULL;
-    }
-    if(res != ESP_OK){
-      break;
-    }
-    //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
-  }
-  return res;
-}
+  Serial.println("command: " + command);
 
-static esp_err_t cmd_handler(httpd_req_t *req){
-  char*  buf;
-  size_t buf_len;
-  char variable[32] = {0,};
-
-  buf_len = httpd_req_get_url_query_len(req) + 1;
-  if (buf_len > 1) {
-    buf = (char*)malloc(buf_len);
-    if(!buf){
-      httpd_resp_send_500(req);
-      return ESP_FAIL;
-    }
-    if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-      if (httpd_query_key_value(buf, "go", variable, sizeof(variable)) == ESP_OK) {
-      } else {
-        free(buf);
-        httpd_resp_send_404(req);
-        return ESP_FAIL;
-      }
-    } else {
-      free(buf);
-      httpd_resp_send_404(req);
-      return ESP_FAIL;
-    }
-    free(buf);
-  } else {
-    httpd_resp_send_404(req);
-    return ESP_FAIL;
-  }
-
-  sensor_t * s = esp_camera_sensor_get();
-  int res = 0;
-
-  if(!strcmp(variable, "forward")) {
+  if (command == "forward") {
     Serial.println("Forward");
     digitalWrite(MOTOR_1_PIN_1, 1);
     digitalWrite(MOTOR_1_PIN_2, 0);
     digitalWrite(MOTOR_2_PIN_1, 1);
     digitalWrite(MOTOR_2_PIN_2, 0);
   }
-  else if(!strcmp(variable, "left")) {
+  else if (command == "left") {
     Serial.println("Left");
     digitalWrite(MOTOR_1_PIN_1, 0);
     digitalWrite(MOTOR_1_PIN_2, 0);
     digitalWrite(MOTOR_2_PIN_1, 1);
     digitalWrite(MOTOR_2_PIN_2, 0);
   }
-  else if(!strcmp(variable, "right")) {
+  else if (command == "right") {
     Serial.println("Right");
     digitalWrite(MOTOR_1_PIN_1, 1);
     digitalWrite(MOTOR_1_PIN_2, 0);
     digitalWrite(MOTOR_2_PIN_1, 0);
     digitalWrite(MOTOR_2_PIN_2, 0);
   }
-  else if(!strcmp(variable, "backward")) {
+  else if (command == "backward") {
     Serial.println("Backward");
     digitalWrite(MOTOR_1_PIN_1, 0);
     digitalWrite(MOTOR_1_PIN_2, 1);
     digitalWrite(MOTOR_2_PIN_1, 0);
     digitalWrite(MOTOR_2_PIN_2, 1);
   }
-  else if(!strcmp(variable, "stop")) {
+  else if (command == "stop") {
     Serial.println("Stop");
     digitalWrite(MOTOR_1_PIN_1, 0);
     digitalWrite(MOTOR_1_PIN_2, 0);
     digitalWrite(MOTOR_2_PIN_1, 0);
     digitalWrite(MOTOR_2_PIN_2, 0);
   }
-  else if(!strcmp(variable, "servo-left")) {
+  else if (command == "servo-left") {
     Serial.println("Servo Left");
     servoIncrement = -10;
   }
-  else if(!strcmp(variable, "servo-right")) {
+  else if (command == "servo-right") {
     Serial.println("Servo Right");
     servoIncrement = 10;
   }
-  else if(!strcmp(variable, "servo-stop")) {
+  else if (command == "servo-stop") {
     Serial.println("Servo Stop");
     servoIncrement = 0;
   }
-  else {
-    res = -1;
-  }
-
-  if(res){
-    return httpd_resp_send_500(req);
-  }
-
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  return httpd_resp_send(req, NULL, 0);
 }
 
-void startCameraServer(){
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.server_port = 80;
-  httpd_uri_t index_uri = {
-    .uri       = "/",
-    .method    = HTTP_GET,
-    .handler   = index_handler,
-    .user_ctx  = NULL
-  };
-
-  httpd_uri_t cmd_uri = {
-    .uri       = "/action",
-    .method    = HTTP_GET,
-    .handler   = cmd_handler,
-    .user_ctx  = NULL
-  };
-  httpd_uri_t stream_uri = {
-    .uri       = "/stream",
-    .method    = HTTP_GET,
-    .handler   = stream_handler,
-    .user_ctx  = NULL
-  };
-  if (httpd_start(&camera_httpd, &config) == ESP_OK) {
-    httpd_register_uri_handler(camera_httpd, &index_uri);
-    httpd_register_uri_handler(camera_httpd, &cmd_uri);
-  }
-  config.server_port += 1;
-  config.ctrl_port += 1;
-  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
-    httpd_register_uri_handler(stream_httpd, &stream_uri);
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    if (client.connect("EEG-CAR")) {
+      Serial.println("connected");
+      client.subscribe(mqtt_commands_topic);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 3 seconds");
+      delay(3000);
+    }
   }
 }
 
-String get_status(int status) {
+String get_wifi_status(int status) {
   switch (status) {
     case WL_IDLE_STATUS: return "WL_IDLE_STATUS";
     case WL_SCAN_COMPLETED: return "WL_SCAN_COMPLETED";
@@ -398,6 +190,7 @@ void setup() {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
+
   // Wi-Fi connection
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -405,23 +198,54 @@ void setup() {
   while (status != WL_CONNECTED) {
     delay(500);
     status = WiFi.status();
-    Serial.println(get_status(status));
+    if (status == lastWifiStatus) continue;
+    lastWifiStatus = status;
+    Serial.println(get_wifi_status(status));
   }
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.print("Camera Stream Ready! Go to: http://");
   Serial.println(WiFi.localIP());
 
-  // Start streaming web server
-  startCameraServer();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+}
+
+void captureAndPublishImage() {
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    return;
+  }
+
+  if (fb->format != PIXFORMAT_JPEG) {
+    Serial.println("Non-JPEG data not supported");
+    esp_camera_fb_return(fb);
+    return;
+  }
+
+  client.beginPublish(mqtt_camera_topic, fb->len, false);
+  client.write(fb->buf, fb->len);
+  client.endPublish();
+
+  esp_camera_fb_return(fb);
 }
 
 void loop() {
-  servoDegree += servoIncrement;
-
-  if (servoDegree != servo.read() && servoDegree > 0 && servoDegree < 180) {
-    servo.write(servoDegree);
+  if (!client.connected()) {
+    reconnect();
   }
 
-  delay(300);
+  client.loop();
+  captureAndPublishImage();
+
+  unsigned long currentTime = millis();
+  if (currentTime - lastCaptureTime >= 500) {
+    lastCaptureTime = currentTime;
+    servoDegree += servoIncrement;
+    if (servoDegree != servo.read() && servoDegree > 0 && servoDegree < 180) {
+      servo.write(servoDegree);
+    }
+  }
 }

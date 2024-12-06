@@ -20,7 +20,14 @@ mqtt.on('client', (client) => {
 
 // semua pesan yang dipublish ke mqtt dikirim juga ke websocket
 mqtt.on('publish', (data) => {
+  const type = typeof data.payload
   ws.emit(data.topic, data.payload)
+  console.log(
+    Date.now(),
+    data.topic,
+    ':',
+     type !== 'string' ? type : data.payload
+  )
 })
 
 // jika ada client yang konek ke websocket
@@ -33,9 +40,7 @@ ws.on('connection', (socket) => {
   })
 })
 
-app.get('/', (_, res) => {
-  return res.sendFile(import.meta.dirname + '/index.html')
-})
+app.use('/', express.static(import.meta.dirname + '/ui'))
 
 // endpoint api
 app.get('/send', (req, res) => {
