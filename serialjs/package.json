@@ -1,0 +1,9 @@
+{
+	"dependencies": {
+		"@serialport/parser-byte-length": "^13.0.0",
+		"@serialport/parser-readline": "^12.0.0",
+		"@serialport/stream": "^13.0.0",
+		"@types/node": "^22.10.1",
+		"serialport": "^12.0.0"
+	}
+}
