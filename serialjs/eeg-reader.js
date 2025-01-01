@@ -1,8 +1,9 @@
+const io = require('socket.io-client')
 const { SerialPort } = require('serialport');
 const { ByteLengthParser } = require('@serialport/parser-byte-length');
-const { argv0 } = require('process');
 
-// Open the serial port
+const ws = io('ws://localhost:8080')
+
 const port = new SerialPort({
   path: '/dev/ttyACM0',
   baudRate: 9600
@@ -63,7 +64,7 @@ function parsePayload(payload) {
       parsed++
     }
 
-    let code = payload[parsed++]
+    code = payload[parsed++]
 
     if (code & 0x80)
       length = payload[parsed++]
@@ -137,7 +138,17 @@ function handleData([ byte ]) {
       return
     }
 
-    console.log(parsePayload(payload))
+    parsePayload(payload)
+
+    ws.emit('data', data)
+
+    // fetch('http://localhost:8080', {
+    //   method: 'post',
+    //   headers: {
+    //     'content-type': 'application/json'
+    //   },
+    //   body: JSON.stringify(data)
+    // })
 
     // selesai semua, reset
     resetData()
