@@ -140,7 +140,7 @@ function handleData([ byte ]) {
 
     parsePayload(payload)
 
-    ws.emit('data', data)
+    ws.emit('eeg', data)
 
     // fetch('http://localhost:8080', {
     //   method: 'post',

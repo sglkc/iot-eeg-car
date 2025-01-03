@@ -1,12 +1,12 @@
 {
   "name": "arduinos",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "server.mjs",
   "type": "module",
   "scripts": {
-    "start": "nodemon server.js",
-    "pub": "node pub.js",
-    "sub": "node sub.js"
+    "start": "nodemon server.mjs",
+    "pub": "node pub.mjs",
+    "sub": "node sub.mjs"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +14,7 @@
   "dependencies": {
     "aedes": "^0.51.3",
     "aedes-server-factory": "^0.2.1",
+    "cors": "^2.8.5",
     "express": "^4.21.1",
     "mongodb": "^6.11.0",
     "mqtt": "^5.10.3",

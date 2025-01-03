@@ -2,6 +2,7 @@ import net from 'node:net'
 import http from 'node:http'
 import Aedes from 'aedes'
 import express from 'express'
+import cors from 'cors'
 import { Server } from 'socket.io'
 import { MongoClient } from 'mongodb'
 
@@ -12,6 +13,8 @@ const ws = new Server(api)
 const broker = net.createServer(mqtt.handle)
 const mongo = new MongoClient('mongodb://localhost:27017')
 const db = mongo.db('eeg-project')
+
+app.use(cors())
 
 // jika ada client yang konek ke broker mqtt
 mqtt.on('client', (client) => {
@@ -34,6 +37,10 @@ mqtt.on('publish', (data) => {
 ws.on('connection', (socket) => {
   console.log('websocket client connected', socket.id)
 
+  socket.on('disconnect', () => {
+    console.log('disconnected', socket.id)
+  })
+
   // setiap ada pesan websocket, kriim ulang ke mqtt
   socket.onAny((topic, payload) => {
     mqtt.publish({ topic, payload })
@@ -44,21 +51,18 @@ app.use('/', express.static(import.meta.dirname + '/ui'))
 
 // endpoint api
 app.get('/send', (req, res) => {
-  const { text } = req.query
+  if (!req.is('application/json')) {
+    res.status(400).send('body must be json');
+    return
+  }
 
-  if (!text) return res.status(400).send('text query missing')
-
-  mqtt.publish({
-    topic: 'first/test',
-    payload: text
-  })
-
-  return res.send('success')
+  ws.emit('data', req.body)
+  res.status(200).sebd('success')
 })
 
-mongo.connect().then(() => {
-  console.log('mongo db connected')
-})
+mongo.connect()
+  .then(() => console.log('mongo db connected'))
+  .catch((err) => console.error('mongo db error!', err))
 
 // port default mqtt broker
 broker.listen(1883, () => {

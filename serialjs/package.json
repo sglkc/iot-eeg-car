@@ -1,5 +1,5 @@
 {
-  "type": "module",
+	"type": "module",
 	"scripts": {
 		"server": "node server.js",
 		"start": "node eeg-reader.js"
@@ -8,10 +8,7 @@
 		"@serialport/parser-byte-length": "^13.0.0",
 		"@serialport/stream": "^13.0.0",
 		"@types/node": "^22.10.1",
-		"cors": "^2.8.5",
-		"express": "^4.21.2",
 		"serialport": "^12.0.0",
-		"socket.io": "^4.8.1",
 		"socket.io-client": "^4.8.1"
 	}
 }
