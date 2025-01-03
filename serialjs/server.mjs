@@ -1,8 +1,9 @@
-const path = require('path');
-const { createServer } = require('node:http');
-const { Server } = require('socket.io');
-const express = require('express');
-const cors = require('cors');
+import path from 'node:path';
+import { createServer } from 'node:http';
+import { Server } from 'socket.io';
+import express from 'express';
+import cors from 'cors';
+
 const app = express();
 const api = createServer(app);
 const ws = new Server(api, {
@@ -18,7 +19,7 @@ const PORT = 8080;
 app.use(cors());
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'))
+  res.sendFile(path.join(import.meta.dirname, 'index.html'))
 });
 
 app.post('/send', (req, res) => {

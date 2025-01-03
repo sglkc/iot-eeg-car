@@ -1,6 +1,6 @@
-const io = require('socket.io-client')
-const { SerialPort } = require('serialport');
-const { ByteLengthParser } = require('@serialport/parser-byte-length');
+import io from 'socket.io-client'
+import { SerialPort } from 'serialport';
+import { ByteLengthParser } from '@serialport/parser-byte-length';
 
 const ws = io('ws://localhost:8080')
 

@@ -1,4 +1,5 @@
 {
+  "type": "module",
 	"scripts": {
 		"server": "node server.js",
 		"start": "node eeg-reader.js"
