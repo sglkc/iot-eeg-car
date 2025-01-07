@@ -6,7 +6,7 @@ const ws = io('ws://localhost:8080')
 
 const port = new SerialPort({
   path: '/dev/ttyACM0',
-  baudRate: 9600
+  baudRate: 115200
 });
 
 const parser = port.pipe(new ByteLengthParser({ length: 1 }))
@@ -45,6 +45,8 @@ const data = {
   low_gamma: 0,
   mid_gamma: 0,
 }
+
+let lastData = data
 
 function resetData() {
   packet = []
@@ -90,6 +92,9 @@ function parsePayload(payload) {
         data.low_gamma = (payload[parsed+18] & 0xFF << 16) | (payload[parsed+19] & 0xFF << 8) | payload[parsed+20]
         data.mid_gamma = (payload[parsed+21] & 0xFF << 16) | (payload[parsed+22] & 0xFF << 8) | payload[parsed+23]
         break
+      case BLINK:
+        data.blink = payload[parsed]
+        break
       case ATTENTION:
         data.attention = payload[parsed]
         break
@@ -97,7 +102,7 @@ function parsePayload(payload) {
         data.meditation = payload[parsed]
         break
       case POWER:
-        data.signal = payload[parsed]
+        data.signal = /* inverse */ 200 - payload[parsed]
         break
     }
 
@@ -140,7 +145,14 @@ function handleData([ byte ]) {
 
     parsePayload(payload)
 
-    ws.emit('eeg', data)
+    const duplicate = Object.keys(data).every((key) => data[key] === lastData[key])
+
+    if (!duplicate) {
+      console.log(data)
+      ws.emit('eeg', data)
+    }
+
+    lastData = structuredClone(data)
 
     // fetch('http://localhost:8080', {
     //   method: 'post',
