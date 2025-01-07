@@ -1,8 +1,7 @@
 {
 	"type": "module",
 	"scripts": {
-		"server": "node server.js",
-		"start": "node eeg-reader.js"
+		"start": "node reader.mjs"
 	},
 	"dependencies": {
 		"@serialport/parser-byte-length": "^13.0.0",
