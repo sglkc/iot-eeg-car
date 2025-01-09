@@ -1,4 +1,5 @@
 {
+	"main": "reader.mjs",
 	"type": "module",
 	"scripts": {
 		"start": "node reader.mjs"

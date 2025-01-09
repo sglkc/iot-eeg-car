@@ -35,7 +35,7 @@ const data = {
   signal: 0,
   attention: 0,
   meditation: 0,
-  blink: 0,
+  // blink: 0,
   delta: 0,
   theta: 0,
   low_alpha: 0,
@@ -92,9 +92,9 @@ function parsePayload(payload) {
         data.low_gamma = (payload[parsed+18] & 0xFF << 16) | (payload[parsed+19] & 0xFF << 8) | payload[parsed+20]
         data.mid_gamma = (payload[parsed+21] & 0xFF << 16) | (payload[parsed+22] & 0xFF << 8) | payload[parsed+23]
         break
-      case BLINK:
-        data.blink = payload[parsed]
-        break
+      // case BLINK:
+      //   data.blink = payload[parsed]
+      //   break
       case ATTENTION:
         data.attention = payload[parsed]
         break
