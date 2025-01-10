@@ -9,13 +9,11 @@
 #include "soc/rtc_cntl_reg.h"    // disable brownout problems
 #include <PubSubClient.h>
 
-const char* ssid = "ICT_LAB";
-const char* password = "ICTLAB2023";
-const char* mqtt_server = "192.168.1.100";
+const char* ssid = "Dika";
+const char* password = "dikta221";
+const char* mqtt_server = "192.168.32.247";
 const char* mqtt_commands_topic = "esp32/commands";
 const char* mqtt_camera_topic = "esp32/camera";
-
-#define PART_BOUNDARY "---split---"
 
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
@@ -173,16 +171,10 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-
-  if(psramFound()){
-    config.frame_size = FRAMESIZE_VGA;
-    config.jpeg_quality = 10;
-    config.fb_count = 2;
-  } else {
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
-    config.fb_count = 1;
-  }
+  config.grab_mode = CAMERA_GRAB_LATEST;
+  config.frame_size = FRAMESIZE_SVGA;
+  config.jpeg_quality = 50;
+  config.fb_count = 2;
 
   // Camera init
   esp_err_t err = esp_camera_init(&config);
@@ -198,13 +190,13 @@ void setup() {
   while (status != WL_CONNECTED) {
     delay(500);
     status = WiFi.status();
-    if (status == lastWifiStatus) continue;
+    // if (status == lastWifiStatus) continue;
     lastWifiStatus = status;
     Serial.println(get_wifi_status(status));
   }
   Serial.println("");
   Serial.println("WiFi connected");
-  Serial.print("Camera Stream Ready! Go to: http://");
+  Serial.print("IP Address: http://");
   Serial.println(WiFi.localIP());
 
   client.setServer(mqtt_server, 1883);
@@ -237,13 +229,15 @@ void loop() {
     reconnect();
   }
 
-  client.loop();
-  captureAndPublishImage();
-
   unsigned long currentTime = millis();
+
   if (currentTime - lastCaptureTime >= 500) {
+
+    captureAndPublishImage();
+    client.loop();
     lastCaptureTime = currentTime;
     servoDegree += servoIncrement;
+
     if (servoDegree != servo.read() && servoDegree > 0 && servoDegree < 180) {
       servo.write(servoDegree);
     }
