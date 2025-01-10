@@ -26,6 +26,7 @@ generatedChecksum = 0
 checksum = 0
 
 data = {
+    'timestamp': 0,
     'signal': 0,
     'attention': 0,
     'meditation': 0,
@@ -45,10 +46,10 @@ lastData = copy.deepcopy(data)
 def create_csv_writer():
     # Create a CSV file with a timestamped name
     timestamp = datetime.now().strftime("%d_%H%M%S")
-    csv_filename = f"eeg_{timestamp}.csv"
+    csv_filename = f"data_{timestamp}.csv"
 
     # Open the CSV file for writing
-    csv_file = open(csv_filename, mode='w', newline='')
+    csv_file = open('datasets/' + csv_filename, mode='w', newline='')
     writer = csv.DictWriter(csv_file, fieldnames=data.keys())
     writer.writeheader()
 
@@ -144,16 +145,32 @@ def handleData(byte):
         duplicate = all(data[key] == lastData[key] for key in data)
 
         if not duplicate:
-            sio.emit('eeg', data)
-            data['timestamp'] = int(datetime.now().timestamp())
-            print(data['timestamp'], flush=True)
-            print(data, flush=True)
-            writer.writerow(data)
-            del data['timestamp']
+            send_data()
 
         lastData = copy.deepcopy(data)
 
         resetData()
+
+def send_data():
+    data['timestamp'] = int(datetime.now().timestamp())
+    print(data['timestamp'], flush=True)
+    print(data, flush=True)
+    writer.writerow(data)
+    del data['timestamp']
+
+    sio.emit('eeg', data)
+
+    if data['attention'] > 150 and data['meditation'] > 150:
+        command = 'forward'
+    elif data['attention'] < 100 and data['meditation'] < 100:
+        command = 'backward'
+    else:
+        command = 'stop'
+
+    if command:
+        print(command)
+        sio.emit('esp32/commands', command)
+
 
 try:
     while True:
